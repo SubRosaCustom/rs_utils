@@ -37,11 +37,12 @@ jobs:
           mkdir -p dist
           cp build/librosaserver_src_integration.so dist/
           cp deps/moonjit/src/libluajit.so dist/
-          tar -czf librosaserver_src_integration-${GITHUB_SHA}.tar.gz -C dist .
+          cd dist
+          zip -r "../librosaserver_src_integration-${GITHUB_SHA}.zip" .
 
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: main-${{ github.sha }}
           name: main-${{ github.sha }}
-          files: librosaserver_src_integration-${{ github.sha }}.tar.gz
+          files: librosaserver_src_integration-${{ github.sha }}.zip
