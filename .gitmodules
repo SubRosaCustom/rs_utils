@@ -1,0 +1,9 @@
+[submodule "deps/moonjit"]
+	path = deps/moonjit
+	url = https://github.com/moonjit/moonjit
+[submodule "deps/sol2"]
+	path = deps/sol2
+	url = https://github.com/ThePhD/sol2
+[submodule "deps/miniz"]
+	path = deps/miniz
+	url = https://github.com/richgel999/miniz

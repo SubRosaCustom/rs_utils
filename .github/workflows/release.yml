@@ -1,0 +1,47 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install LuaJIT
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake build-essential
+
+      - name: Build MoonJIT
+        run: make -C deps/moonjit/src
+
+      - name: Configure
+        run: cmake -S . -B build
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Package
+        run: |
+          mkdir -p dist
+          cp build/librosaserver_src_integration.so dist/
+          cp deps/moonjit/src/libluajit.so dist/
+          tar -czf librosaserver_src_integration-${GITHUB_SHA}.tar.gz -C dist .
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: main-${{ github.sha }}
+          name: main-${{ github.sha }}
+          files: librosaserver_src_integration-${{ github.sha }}.tar.gz
