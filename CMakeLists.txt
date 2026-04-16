@@ -4,6 +4,7 @@ set(DEPS_ROOT "${CMAKE_CURRENT_LIST_DIR}/deps")
 set(MOONJIT_ROOT "${DEPS_ROOT}/moonjit")
 set(SOL2_ROOT "${DEPS_ROOT}/sol2")
 set(MINIZ_ROOT "${DEPS_ROOT}/miniz")
+set(ROSASERVER_ROOT "${DEPS_ROOT}/RosaServer/RosaServer")
 
 # librosaserver_src_integration.so
 add_library(rosaserver_src_integration SHARED
@@ -11,15 +12,16 @@ add_library(rosaserver_src_integration SHARED
 )
 
 set_property(TARGET rosaserver_src_integration PROPERTY CXX_STANDARD 17)
-set_property(TARGET rosaserver_src_integration PROPERTY C_VISIBILITY_PRESET hidden)
-set_property(TARGET rosaserver_src_integration PROPERTY CXX_VISIBILITY_PRESET hidden)
-set_property(TARGET rosaserver_src_integration PROPERTY VISIBILITY_INLINES_HIDDEN ON)
+set_property(TARGET rosaserver_src_integration PROPERTY C_VISIBILITY_PRESET default)
+set_property(TARGET rosaserver_src_integration PROPERTY CXX_VISIBILITY_PRESET default)
+set_property(TARGET rosaserver_src_integration PROPERTY VISIBILITY_INLINES_HIDDEN OFF)
 
 target_compile_definitions(rosaserver_src_integration PRIVATE SOL_LUAJIT)
 target_include_directories(rosaserver_src_integration PRIVATE
     "${CMAKE_CURRENT_LIST_DIR}"
     "${MOONJIT_ROOT}/src"
     "${SOL2_ROOT}/include"
+    "${ROSASERVER_ROOT}"
 )
 target_link_libraries(rosaserver_src_integration "${MOONJIT_ROOT}/src/libluajit.so")
 

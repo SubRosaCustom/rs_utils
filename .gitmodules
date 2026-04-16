@@ -7,3 +7,6 @@
 [submodule "deps/miniz"]
 	path = deps/miniz
 	url = https://github.com/richgel999/miniz
+[submodule "deps/RosaServer"]
+	path = deps/RosaServer
+	url = https://github.com/RosaServer/RosaServer.git
