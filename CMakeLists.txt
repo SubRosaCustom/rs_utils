@@ -4,7 +4,7 @@ set(DEPS_ROOT "${CMAKE_CURRENT_LIST_DIR}/deps")
 set(MOONJIT_ROOT "${DEPS_ROOT}/moonjit")
 set(SOL2_ROOT "${DEPS_ROOT}/sol2")
 set(MINIZ_ROOT "${DEPS_ROOT}/miniz")
-set(ROSASERVER_ROOT "${DEPS_ROOT}/RosaServer/RosaServer")
+set(ROSASERVER_ROOT "${DEPS_ROOT}/rosaserver_headers")
 
 # librosaserver_src_integration.so
 add_library(rosaserver_src_integration SHARED
