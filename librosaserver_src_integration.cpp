@@ -22,15 +22,15 @@ struct Vector {
 
 struct ItemType {
   int unk0;
-  int price;           // 04
-  float mass;          // 08
-  int canCollide;      // 0c
-  int isGun;           // 10
-  int isOneHanded;     // 14
-  int fireRate;        // 18
-  int bulletType;      // 1c
-  int unk2;            // 20
-  int magazineAmmo;    // 24
+  int price;             // 04
+  float mass;            // 08
+  int canCollide;        // 0c
+  int isGun;             // 10
+  int isOneHanded;       // 14
+  int fireRate;          // 18
+  int bulletType;        // 1c
+  int unk2;              // 20
+  int magazineAmmo;      // 24
   float bulletVelocity;  // 28
   float bulletSpread;    // 2c
   char name[64];         // 30
@@ -56,43 +56,16 @@ struct ItemType {
 #undef STRINGFY2
 #undef STRINGFY
 
-// Resolved once in openLibrary, then used by all registered free functions.
-// Safe because RosaServer hosts a single Lua state in-process.
-ItemType* g_itemTypeBase = nullptr;
+ItemType* itemTypes = nullptr;
 
 bool isValidItemType(const ItemType& item_type) {
   return item_type.mass > 0.0f;
 }
 
-ItemType* getItemTypeBase(sol::state_view lua) {
-  sol::table item_types = lua["itemTypes"];
-  if (!item_types.valid()) {
-    throw std::runtime_error("itemTypes table is unavailable");
-  }
-
-  sol::table meta = item_types[sol::metatable_key];
-  if (!meta.valid()) {
-    throw std::runtime_error("itemTypes metatable is unavailable");
-  }
-
-  sol::protected_function index_fn = meta["__index"];
-  if (!index_fn.valid()) {
-    throw std::runtime_error("itemTypes.__index is unavailable");
-  }
-
-  sol::protected_function_result result = index_fn(item_types, 0u);
-  if (!result.valid()) {
-    sol::error err = result;
-    throw std::runtime_error(err.what());
-  }
-
-  return result.get<ItemType*>();
-}
-
 int getItemTypeCount() {
   int count = static_cast<int>(rsMaxNumberOfItemTypes);
   for (unsigned int i = rsMaxNumberOfItemTypes; i <= actualMaxNumberOfItemTypes; ++i) {
-    if (isValidItemType(g_itemTypeBase[i])) {
+    if (isValidItemType(itemTypes[i])) {
       ++count;
     }
   }
@@ -103,12 +76,11 @@ sol::table getAllItemTypes(sol::this_state state) {
   sol::state_view lua(state);
   sol::table arr = lua.create_table();
   for (unsigned int i = 0; i < rsMaxNumberOfItemTypes; ++i) {
-    arr.add(&g_itemTypeBase[i]);
+    arr.add(&itemTypes[i]);
   }
-
   for (unsigned int i = rsMaxNumberOfItemTypes; i <= actualMaxNumberOfItemTypes; ++i) {
-    if (isValidItemType(g_itemTypeBase[i])) {
-      arr.add(&g_itemTypeBase[i]);
+    if (isValidItemType(itemTypes[i])) {
+      arr.add(&itemTypes[i]);
     }
   }
   return arr;
@@ -118,14 +90,14 @@ ItemType* getItemTypeByName(const char* name) {
   if (name == nullptr) {
     return nullptr;
   }
-
   for (unsigned int i = 0; i <= actualMaxNumberOfItemTypes; ++i) {
-    if (isValidItemType(g_itemTypeBase[i]) &&
-        std::strcmp(g_itemTypeBase[i].name, name) == 0) {
-      return &g_itemTypeBase[i];
+    if (i >= rsMaxNumberOfItemTypes && !isValidItemType(itemTypes[i])) {
+      continue;
+    }
+    if (std::strcmp(itemTypes[i].name, name) == 0) {
+      return &itemTypes[i];
     }
   }
-
   return nullptr;
 }
 
@@ -133,32 +105,36 @@ ItemType* itemTypesIndex(sol::table, unsigned int idx) {
   if (idx > actualMaxNumberOfItemTypes) {
     throw std::invalid_argument("Index out of range");
   }
-
-  if (idx >= rsMaxNumberOfItemTypes && !isValidItemType(g_itemTypeBase[idx])) {
+  if (idx >= rsMaxNumberOfItemTypes && !isValidItemType(itemTypes[idx])) {
     throw std::invalid_argument("Index out of range");
   }
-
-  return &g_itemTypeBase[idx];
+  return &itemTypes[idx];
 }
 
 sol::table openLibrary(sol::this_state state) {
   std::fprintf(stderr, "[rs_integration] openLibrary called\n");
 
   sol::state_view lua(state);
-  g_itemTypeBase = getItemTypeBase(lua);
-  if (g_itemTypeBase == nullptr) {
-    throw std::runtime_error("itemTypes base pointer is null");
+
+  const uintptr_t base_address = lua["memory"]["getBaseAddress"]();
+  itemTypes = reinterpret_cast<ItemType*>(base_address + 0x5a60d7c0);
+
+  std::fprintf(stderr, "[rs_integration] base=0x%lx, itemTypes=%p\n",
+               static_cast<unsigned long>(base_address),
+               static_cast<void*>(itemTypes));
+
+  sol::table lua_item_types = lua["itemTypes"];
+  if (!lua_item_types.valid()) {
+    throw std::runtime_error("itemTypes table is unavailable");
+  }
+  sol::table meta = lua_item_types[sol::metatable_key];
+  if (!meta.valid()) {
+    throw std::runtime_error("itemTypes metatable is unavailable");
   }
 
-  std::fprintf(stderr, "[rs_integration] itemTypes base resolved to %p\n",
-               static_cast<void*>(g_itemTypeBase));
-
-  sol::table item_types = lua["itemTypes"];
-  sol::table meta = item_types[sol::metatable_key];
-
-  item_types["getCount"] = &getItemTypeCount;
-  item_types["getAll"] = &getAllItemTypes;
-  item_types["getByName"] = &getItemTypeByName;
+  lua_item_types["getCount"] = &getItemTypeCount;
+  lua_item_types["getAll"] = &getAllItemTypes;
+  lua_item_types["getByName"] = &getItemTypeByName;
 
   meta["__len"] = &getItemTypeCount;
   meta["__index"] = &itemTypesIndex;
