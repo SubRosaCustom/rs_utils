@@ -250,7 +250,7 @@ sol::table openLibrary(sol::this_state state) {
                                               const std::string& archive_data) -> sol::table {
     return extractZipArchive(current_state, archive_data);
   });
-  lua["miniz"] = library;
+  lua["_G"]["miniz"] = library;
   return library;
 }
 
