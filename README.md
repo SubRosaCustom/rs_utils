@@ -66,5 +66,5 @@ require("librosaserver_src_integration")
 ```
 
 ## Releases
-- GitHub Actions currently builds Linux artifacts only.
+- GitHub Actions currently builds Linux artifacts.
 - The release artifact is a `.zip` containing `librosaserver_src_integration.so` and `libluajit.so`.
