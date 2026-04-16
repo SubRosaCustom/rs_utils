@@ -152,7 +152,7 @@ sol::table openLibrary(sol::this_state state) {
   }
 
   originalGetAddress = lua_memory["getAddress"];
-  memory["getAddress"] = &getAddress;
+  lua_memory["getAddress"] = &getAddress;
 
   sol::table library = lua.create_table();
   library["getCount"] = &getItemTypeCount;
