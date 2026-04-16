@@ -36,6 +36,7 @@ jobs:
         run: |
           mkdir -p dist
           cp build/librosaserver_src_integration.so dist/
+          cp build/libminiz.so dist/
           cp deps/moonjit/src/libluajit.so dist/
           cd dist
           zip -r "../librosaserver_src_integration-${GITHUB_SHA}.zip" .
