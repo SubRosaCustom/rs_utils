@@ -1,10 +1,8 @@
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
-#include <memory>
 #include <stdexcept>
-#include <string>
 
-#include "miniz.h"
 #include "sol/sol.hpp"
 
 namespace {
@@ -58,6 +56,10 @@ struct ItemType {
 #undef STRINGFY2
 #undef STRINGFY
 
+// Resolved once in openLibrary, then used by all registered free functions.
+// Safe because RosaServer hosts a single Lua state in-process.
+ItemType* g_itemTypeBase = nullptr;
+
 bool isValidItemType(const ItemType& item_type) {
   return item_type.mass > 0.0f;
 }
@@ -87,170 +89,86 @@ ItemType* getItemTypeBase(sol::state_view lua) {
   return result.get<ItemType*>();
 }
 
-int getItemTypeCount(ItemType* base) {
+int getItemTypeCount() {
   int count = static_cast<int>(rsMaxNumberOfItemTypes);
   for (unsigned int i = rsMaxNumberOfItemTypes; i <= actualMaxNumberOfItemTypes; ++i) {
-    if (isValidItemType(base[i])) {
+    if (isValidItemType(g_itemTypeBase[i])) {
       ++count;
     }
   }
   return count;
 }
 
-sol::table getAllItemTypes(sol::this_state state, ItemType* base) {
+sol::table getAllItemTypes(sol::this_state state) {
   sol::state_view lua(state);
   sol::table arr = lua.create_table();
   for (unsigned int i = 0; i < rsMaxNumberOfItemTypes; ++i) {
-    arr.add(&base[i]);
+    arr.add(&g_itemTypeBase[i]);
   }
 
   for (unsigned int i = rsMaxNumberOfItemTypes; i <= actualMaxNumberOfItemTypes; ++i) {
-    if (isValidItemType(base[i])) {
-      arr.add(&base[i]);
+    if (isValidItemType(g_itemTypeBase[i])) {
+      arr.add(&g_itemTypeBase[i]);
     }
   }
   return arr;
 }
 
-std::runtime_error zipError(const std::string& message, mz_zip_archive* archive) {
-  return std::runtime_error(message + ": " +
-                            std::string(mz_zip_get_error_string(
-                                mz_zip_get_last_error(archive))));
+ItemType* getItemTypeByName(const char* name) {
+  if (name == nullptr) {
+    return nullptr;
+  }
+
+  for (unsigned int i = 0; i <= actualMaxNumberOfItemTypes; ++i) {
+    if (isValidItemType(g_itemTypeBase[i]) &&
+        std::strcmp(g_itemTypeBase[i].name, name) == 0) {
+      return &g_itemTypeBase[i];
+    }
+  }
+
+  return nullptr;
 }
 
-std::string createZipArchive(sol::table files) {
-  mz_zip_archive archive {};
-  if (!mz_zip_writer_init_heap(&archive, 0, 0)) {
-    throw zipError("mz_zip_writer_init_heap failed", &archive);
+ItemType* itemTypesIndex(sol::table, unsigned int idx) {
+  if (idx > actualMaxNumberOfItemTypes) {
+    throw std::invalid_argument("Index out of range");
   }
 
-  try {
-    for (const auto& pair : files) {
-      const std::string name = pair.first.as<std::string>();
-      const std::string data = pair.second.as<std::string>();
-
-      if (!mz_zip_writer_add_mem(&archive, name.c_str(), data.data(), data.size(),
-                                 MZ_BEST_COMPRESSION)) {
-        throw zipError("mz_zip_writer_add_mem failed", &archive);
-      }
-    }
-
-    void* output_ptr = nullptr;
-    size_t output_size = 0;
-    if (!mz_zip_writer_finalize_heap_archive(&archive, &output_ptr, &output_size)) {
-      throw zipError("mz_zip_writer_finalize_heap_archive failed", &archive);
-    }
-
-    std::unique_ptr<void, decltype(&mz_free)> output_holder(output_ptr, &mz_free);
-    std::string output(static_cast<const char*>(output_ptr), output_size);
-    mz_zip_writer_end(&archive);
-    return output;
-  } catch (...) {
-    mz_zip_writer_end(&archive);
-    throw;
-  }
-}
-
-sol::table extractZipArchive(sol::this_state state, const std::string& archive_data) {
-  sol::state_view lua(state);
-  mz_zip_archive archive {};
-  if (!mz_zip_reader_init_mem(&archive, archive_data.data(), archive_data.size(), 0)) {
-    throw zipError("mz_zip_reader_init_mem failed", &archive);
+  if (idx >= rsMaxNumberOfItemTypes && !isValidItemType(g_itemTypeBase[idx])) {
+    throw std::invalid_argument("Index out of range");
   }
 
-  sol::table files = lua.create_table();
-
-  try {
-    const mz_uint count = mz_zip_reader_get_num_files(&archive);
-    for (mz_uint i = 0; i < count; ++i) {
-      mz_zip_archive_file_stat stat {};
-      if (!mz_zip_reader_file_stat(&archive, i, &stat)) {
-        throw zipError("mz_zip_reader_file_stat failed", &archive);
-      }
-
-      if (mz_zip_reader_is_file_a_directory(&archive, i)) {
-        continue;
-      }
-
-      size_t extracted_size = 0;
-      void* extracted = mz_zip_reader_extract_to_heap(&archive, i, &extracted_size, 0);
-      if (extracted == nullptr) {
-        throw zipError("mz_zip_reader_extract_to_heap failed", &archive);
-      }
-
-      std::unique_ptr<void, decltype(&mz_free)> extracted_holder(extracted, &mz_free);
-      files[stat.m_filename] =
-          std::string(static_cast<const char*>(extracted), extracted_size);
-    }
-
-    mz_zip_reader_end(&archive);
-    return files;
-  } catch (...) {
-    mz_zip_reader_end(&archive);
-    throw;
-  }
+  return &g_itemTypeBase[idx];
 }
 
 sol::table openLibrary(sol::this_state state) {
+  std::fprintf(stderr, "[rs_integration] openLibrary called\n");
+
   sol::state_view lua(state);
-  ItemType* base = getItemTypeBase(lua);
-  if (base == nullptr) {
+  g_itemTypeBase = getItemTypeBase(lua);
+  if (g_itemTypeBase == nullptr) {
     throw std::runtime_error("itemTypes base pointer is null");
   }
+
+  std::fprintf(stderr, "[rs_integration] itemTypes base resolved to %p\n",
+               static_cast<void*>(g_itemTypeBase));
 
   sol::table item_types = lua["itemTypes"];
   sol::table meta = item_types[sol::metatable_key];
 
-  item_types["getCount"] = sol::as_function([base]() -> int {
-    return getItemTypeCount(base);
-  });
+  item_types["getCount"] = &getItemTypeCount;
+  item_types["getAll"] = &getAllItemTypes;
+  item_types["getByName"] = &getItemTypeByName;
 
-  item_types["getAll"] = sol::as_function([base](sol::this_state current_state) -> sol::table {
-    return getAllItemTypes(current_state, base);
-  });
+  meta["__len"] = &getItemTypeCount;
+  meta["__index"] = &itemTypesIndex;
 
-  item_types["getByName"] = sol::as_function([base](const char* name) -> ItemType* {
-    if (name == nullptr) {
-      return nullptr;
-    }
-
-    for (unsigned int i = 0; i <= actualMaxNumberOfItemTypes; ++i) {
-      if (isValidItemType(base[i]) && std::strcmp(base[i].name, name) == 0) {
-        return &base[i];
-      }
-    }
-
-    return nullptr;
-  });
-
-  meta["__len"] = sol::as_function([base]() -> int {
-    return getItemTypeCount(base);
-  });
-
-  meta["__index"] = sol::as_function([base](sol::table, unsigned int idx) -> ItemType* {
-    if (idx > actualMaxNumberOfItemTypes) {
-      throw std::invalid_argument("Index out of range");
-    }
-
-    if (idx >= rsMaxNumberOfItemTypes && !isValidItemType(base[idx])) {
-      throw std::invalid_argument("Index out of range");
-    }
-
-    return &base[idx];
-  });
+  const int initial_count = getItemTypeCount();
+  std::fprintf(stderr, "[rs_integration] installed overrides, initial count = %d\n",
+               initial_count);
 
   sol::table library = lua.create_table();
-  library["getCount"] = sol::as_function([base]() -> int {
-    return getItemTypeCount(base);
-  });
-  library["createZip"] = sol::as_function([](sol::table files) -> std::string {
-    return createZipArchive(files);
-  });
-  library["extractZip"] = sol::as_function([](sol::this_state current_state,
-                                              const std::string& archive_data) -> sol::table {
-    return extractZipArchive(current_state, archive_data);
-  });
-  lua["_G"]["miniz"] = library;
+  library["getCount"] = &getItemTypeCount;
   return library;
 }
 
@@ -258,5 +176,6 @@ sol::table openLibrary(sol::this_state state) {
 
 extern "C" __attribute__((visibility("default"))) int
 luaopen_librosaserver_src_integration(lua_State* state) {
+  std::fprintf(stderr, "[rs_integration] luaopen_librosaserver_src_integration entry\n");
   return sol::stack::call_lua(state, 1, openLibrary);
 }
