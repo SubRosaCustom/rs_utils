@@ -1,7 +1,7 @@
-# librosaserver_src_integration
-Allows for custom ItemTypes via extending the default max count from 46 to the actual 255 (probably 256 just being safe) and checking for `mass > 0`.
-
-Ships alongside `libminiz.so`, which exposes in-memory ZIP helpers used by `rs_integration` for faster syncing.
+# rs_utils
+Native helper repo for SRC server-side RosaServer integration. It builds the two Lua-loadable shared libraries used by `rs_integration`:
+- `librosaserver_src_integration.so` for custom `itemTypes` overrides
+- `libminiz.so` for in-memory ZIP archive helpers
 
 ## Future
 In the future we will add extending of `VehicleTypes` as well and maybe some stuff that will be more optimized in C++.
@@ -38,8 +38,8 @@ print(files["assets/test.txt"])
 Clone recursively so the vendored dependencies are present:
 
 ```bash
-git clone --recursive https://github.com/SubRosaCustom/librosaserver_src_integration.git
-cd librosaserver_src_integration
+git clone --recursive https://github.com/SubRosaCustom/rs_utils.git
+cd rs_utils
 make -C deps/moonjit/src
 cmake -S . -B build
 cmake --build build --config Release
