@@ -56,6 +56,7 @@ struct ItemType {
 #undef STRINGFY
 
 ItemType* itemTypes = nullptr;
+sol::protected_function g_originalGetAddress;
 
 bool isValidItemType(const ItemType& item_type) {
   return item_type.mass > 0.0f;
@@ -110,6 +111,19 @@ ItemType* itemTypesIndex(sol::table, unsigned int idx) {
   return &itemTypes[idx];
 }
 
+uintptr_t getAddress(sol::object obj) {
+  ItemType* ptr = obj.as<ItemType*>();
+  if (ptr != nullptr) {
+    return reinterpret_cast<uintptr_t>(ptr);
+  }
+  sol::protected_function_result result = originalGetAddress(obj);
+  if (!result.valid()) {
+    sol::error err = result;
+    throw std::runtime_error(std::string("memory.getAddress failed: ") + err.what());
+  }
+  return result.get<uintptr_t>();
+}
+
 sol::table openLibrary(sol::this_state state) {
   sol::state_view lua(state);
 
@@ -131,6 +145,14 @@ sol::table openLibrary(sol::this_state state) {
 
   meta["__len"] = &getItemTypeCount;
   meta["__index"] = &itemTypesIndex;
+
+  sol::table lua_item_types = lua["memory"];
+  if (!lua_item_types.valid()) {
+    throw std::runtime_error("memory table is unavailable");
+  }
+
+  originalGetAddress = memory["getAddress"];
+  memory["getAddress"] = &getAddress;
 
   sol::table library = lua.create_table();
   library["getCount"] = &getItemTypeCount;
