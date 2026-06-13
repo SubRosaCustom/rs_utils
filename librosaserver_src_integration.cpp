@@ -11,33 +11,33 @@ static constexpr unsigned int rsMaxNumberOfItemTypes = 46;
 static constexpr unsigned int actualMaxNumberOfItemTypes = 255;
 static constexpr unsigned int rsMaxNumberOfVehicleTypes = 17;
 static constexpr unsigned int actualMaxNumberOfVehicleTypes = 127;
-static constexpr uintptr_t vehicleTypesOffset = 0x4d03560;
-static constexpr uintptr_t loadSBVOffset = 0xaf0e0;
-static constexpr uintptr_t setupVehicleTypeNewOffset = 0xac890;
-static constexpr uintptr_t setupObjectTypeWeightOffset = 0xabec0;
 
-ItemType* itemTypes = nullptr;
-VehicleType* vehicleTypes = nullptr;
+ItemType *itemTypes = nullptr;
+VehicleType *vehicleTypes = nullptr;
 
-using LoadSBVFunction = void (*)(int, const char*);
-using SetupVehicleTypeNewFunction = void (*)(int, int, float, float);
+using LoadSBVFunction = void (*)(int, const char *);
+using LoadItemModelFunction = void (*)(int, char *);
+using SetupVehicleTypeNewFunction = void (*)(int, float, float, int);
 using SetupObjectTypeWeightFunction = void (*)(int);
 
 LoadSBVFunction loadSBVFn = nullptr;
+LoadItemModelFunction loadITMFn = nullptr;
+LoadItemModelFunction loadIT3Fn = nullptr;
 SetupVehicleTypeNewFunction setupVehicleTypeNewFn = nullptr;
 SetupObjectTypeWeightFunction setupObjectTypeWeightFn = nullptr;
 
-bool isValidItemType(const ItemType& item_type) {
+bool isValidItemType(const ItemType &item_type) {
   return item_type.mass > 0.0f;
 }
 
-bool isValidVehicleType(const VehicleType& vehicle_type) {
+bool isValidVehicleType(const VehicleType &vehicle_type) {
   return vehicle_type.mass > 0.0f;
 }
 
 int getItemTypeCount() {
   int count = static_cast<int>(rsMaxNumberOfItemTypes);
-  for (unsigned int i = rsMaxNumberOfItemTypes; i <= actualMaxNumberOfItemTypes; ++i) {
+  for (unsigned int i = rsMaxNumberOfItemTypes; i <= actualMaxNumberOfItemTypes;
+       ++i) {
     if (isValidItemType(itemTypes[i])) {
       ++count;
     }
@@ -51,7 +51,8 @@ sol::table getAllItemTypes(sol::this_state state) {
   for (unsigned int i = 0; i < rsMaxNumberOfItemTypes; ++i) {
     arr.add(&itemTypes[i]);
   }
-  for (unsigned int i = rsMaxNumberOfItemTypes; i <= actualMaxNumberOfItemTypes; ++i) {
+  for (unsigned int i = rsMaxNumberOfItemTypes; i <= actualMaxNumberOfItemTypes;
+       ++i) {
     if (isValidItemType(itemTypes[i])) {
       arr.add(&itemTypes[i]);
     }
@@ -59,7 +60,7 @@ sol::table getAllItemTypes(sol::this_state state) {
   return arr;
 }
 
-ItemType* getItemTypeByName(const char* name) {
+ItemType *getItemTypeByName(const char *name) {
   if (name == nullptr) {
     return nullptr;
   }
@@ -74,7 +75,7 @@ ItemType* getItemTypeByName(const char* name) {
   return nullptr;
 }
 
-ItemType* itemTypesIndex(sol::table, unsigned int idx) {
+ItemType *itemTypesIndex(sol::table, unsigned int idx) {
   if (idx > actualMaxNumberOfItemTypes) {
     throw std::invalid_argument("Index out of range");
   }
@@ -86,7 +87,8 @@ ItemType* itemTypesIndex(sol::table, unsigned int idx) {
 
 int getVehicleTypeCount() {
   int count = static_cast<int>(rsMaxNumberOfVehicleTypes);
-  for (unsigned int i = rsMaxNumberOfVehicleTypes; i <= actualMaxNumberOfVehicleTypes; ++i) {
+  for (unsigned int i = rsMaxNumberOfVehicleTypes;
+       i <= actualMaxNumberOfVehicleTypes; ++i) {
     if (isValidVehicleType(vehicleTypes[i])) {
       ++count;
     }
@@ -100,7 +102,8 @@ sol::table getAllVehicleTypes(sol::this_state state) {
   for (unsigned int i = 0; i < rsMaxNumberOfVehicleTypes; ++i) {
     arr.add(&vehicleTypes[i]);
   }
-  for (unsigned int i = rsMaxNumberOfVehicleTypes; i <= actualMaxNumberOfVehicleTypes; ++i) {
+  for (unsigned int i = rsMaxNumberOfVehicleTypes;
+       i <= actualMaxNumberOfVehicleTypes; ++i) {
     if (isValidVehicleType(vehicleTypes[i])) {
       arr.add(&vehicleTypes[i]);
     }
@@ -108,12 +111,13 @@ sol::table getAllVehicleTypes(sol::this_state state) {
   return arr;
 }
 
-VehicleType* getVehicleTypeByName(const char* name) {
+VehicleType *getVehicleTypeByName(const char *name) {
   if (name == nullptr) {
     return nullptr;
   }
   for (unsigned int i = 0; i <= actualMaxNumberOfVehicleTypes; ++i) {
-    if (i >= rsMaxNumberOfVehicleTypes && !isValidVehicleType(vehicleTypes[i])) {
+    if (i >= rsMaxNumberOfVehicleTypes &&
+        !isValidVehicleType(vehicleTypes[i])) {
       continue;
     }
     if (std::strcmp(vehicleTypes[i].name, name) == 0) {
@@ -123,19 +127,21 @@ VehicleType* getVehicleTypeByName(const char* name) {
   return nullptr;
 }
 
-VehicleType* vehicleTypesIndex(sol::table, unsigned int idx) {
+VehicleType *vehicleTypesIndex(sol::table, unsigned int idx) {
   if (idx > actualMaxNumberOfVehicleTypes) {
     throw std::invalid_argument("Index out of range");
   }
-  if (idx >= rsMaxNumberOfVehicleTypes && !isValidVehicleType(vehicleTypes[idx])) {
+  if (idx >= rsMaxNumberOfVehicleTypes &&
+      !isValidVehicleType(vehicleTypes[idx])) {
     throw std::invalid_argument("Index out of range");
   }
   return &vehicleTypes[idx];
 }
 
-void loadSBV(int vehicle_type_index, const char* model_name) {
+void loadSBV(int vehicle_type_index, const char *model_name) {
   const int normalized_index = static_cast<int>(vehicle_type_index);
-  if (normalized_index < 0 || normalized_index > static_cast<int>(actualMaxNumberOfVehicleTypes)) {
+  if (normalized_index < 0 ||
+      normalized_index > static_cast<int>(actualMaxNumberOfVehicleTypes)) {
     throw std::invalid_argument("vehicle type index out of range");
   }
   if (model_name == nullptr || *model_name == '\0') {
@@ -145,21 +151,46 @@ void loadSBV(int vehicle_type_index, const char* model_name) {
   loadSBVFn(normalized_index, model_name);
 }
 
-void setupVehicleTypeNew(int vehicle_type_index,
-                         int initial_wheel_flags,
-                         float wheel_radius,
-                         float wheel_mass) {
+void loadITM(int item_type_index, const char *model_path) {
+  if (item_type_index < 0 ||
+      item_type_index > static_cast<int>(actualMaxNumberOfItemTypes)) {
+    throw std::invalid_argument("item type index out of range");
+  }
+  if (model_path == nullptr || *model_path == '\0') {
+    throw std::invalid_argument("ITM path must be non-empty");
+  }
+
+  loadITMFn(item_type_index, const_cast<char *>(model_path));
+}
+
+void loadIT3(int item_type_index, const char *model_path) {
+  if (item_type_index < 0 ||
+      item_type_index > static_cast<int>(actualMaxNumberOfItemTypes)) {
+    throw std::invalid_argument("item type index out of range");
+  }
+  if (model_path == nullptr || *model_path == '\0') {
+    throw std::invalid_argument("IT3 path must be non-empty");
+  }
+
+  loadIT3Fn(item_type_index, const_cast<char *>(model_path));
+}
+
+void setupVehicleTypeNew(int vehicle_type_index, int initial_wheel_flags,
+                         float wheel_radius, float wheel_mass) {
   const int normalized_index = static_cast<int>(vehicle_type_index);
-  if (normalized_index < 0 || normalized_index > static_cast<int>(actualMaxNumberOfVehicleTypes)) {
+  if (normalized_index < 0 ||
+      normalized_index > static_cast<int>(actualMaxNumberOfVehicleTypes)) {
     throw std::invalid_argument("vehicle type index out of range");
   }
 
-  setupVehicleTypeNewFn(normalized_index, initial_wheel_flags, wheel_radius, wheel_mass);
+  setupVehicleTypeNewFn(normalized_index, wheel_radius, wheel_mass,
+                        initial_wheel_flags);
 }
 
 void setupObjectTypeWeight(int vehicle_type_index) {
   const int normalized_index = static_cast<int>(vehicle_type_index);
-  if (normalized_index < 0 || normalized_index > static_cast<int>(actualMaxNumberOfVehicleTypes)) {
+  if (normalized_index < 0 ||
+      normalized_index > static_cast<int>(actualMaxNumberOfVehicleTypes)) {
     throw std::invalid_argument("vehicle type index out of range");
   }
 
@@ -170,13 +201,15 @@ sol::table openLibrary(sol::this_state state) {
   sol::state_view lua(state);
 
   const uintptr_t base_address = lua["memory"]["getBaseAddress"]();
-  itemTypes = reinterpret_cast<ItemType*>(base_address + 0x5a60d7c0);
-  vehicleTypes = reinterpret_cast<VehicleType*>(base_address + vehicleTypesOffset);
-  loadSBVFn = reinterpret_cast<LoadSBVFunction>(base_address + loadSBVOffset);
-  setupVehicleTypeNewFn =
-      reinterpret_cast<SetupVehicleTypeNewFunction>(base_address + setupVehicleTypeNewOffset);
-  setupObjectTypeWeightFn =
-      reinterpret_cast<SetupObjectTypeWeightFunction>(base_address + setupObjectTypeWeightOffset);
+  itemTypes = reinterpret_cast<ItemType *>(base_address + 0x5a60d7c0);
+  vehicleTypes = reinterpret_cast<VehicleType *>(base_address + 0x4d03560);
+  loadITMFn = reinterpret_cast<LoadItemModelFunction>(base_address + 0x41740);
+  loadIT3Fn = reinterpret_cast<LoadItemModelFunction>(base_address + 0x42c40);
+  loadSBVFn = reinterpret_cast<LoadSBVFunction>(base_address + 0xaf0e0);
+  setupVehicleTypeNewFn = reinterpret_cast<SetupVehicleTypeNewFunction>(
+      base_address + 0xac890);
+  setupObjectTypeWeightFn = reinterpret_cast<SetupObjectTypeWeightFunction>(
+      base_address + 0xabec0);
 
   {
     sol::table lua_item_types = lua["itemTypes"];
@@ -195,7 +228,7 @@ sol::table openLibrary(sol::this_state state) {
     meta["__len"] = &getItemTypeCount;
     meta["__index"] = &itemTypesIndex;
   }
-  
+
   {
     sol::table lua_vehicle_types = lua["vehicleTypes"];
     if (!lua_vehicle_types.valid()) {
@@ -215,6 +248,8 @@ sol::table openLibrary(sol::this_state state) {
   }
 
   sol::table library = lua.create_table();
+  library["loadITM"] = &loadITM;
+  library["loadIT3"] = &loadIT3;
   library["loadSBV"] = &loadSBV;
   library["setupVehicleTypeNew"] = &setupVehicleTypeNew;
   library["setupObjectTypeWeight"] = &setupObjectTypeWeight;
@@ -222,9 +257,9 @@ sol::table openLibrary(sol::this_state state) {
   return library;
 }
 
-}  // namespace
+} // namespace
 
 extern "C" __attribute__((visibility("default"))) int
-luaopen_librosaserver_src_integration(lua_State* state) {
+luaopen_librosaserver_src_integration(lua_State *state) {
   return sol::stack::call_lua(state, 1, openLibrary);
 }
