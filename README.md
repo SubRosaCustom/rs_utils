@@ -11,6 +11,8 @@ This is an integral server part of RosaServer integration for SR:C, you won't be
 
 ## Behavior
 - `require("librosaserver_src_integration")` installs the Lua-side `itemTypes` overrides.
+- The integration module also exposes `sendPacket`, which sends standalone
+  datagrams through the game's existing UDP socket.
 - The module extends `itemTypes` access past the stock RosaServer max of 46 up to an actual max of 255.
 - Extended item types are treated as valid when `mass > 0`.
 - `require("libminiz")` registers the global `miniz` table with `createZip` / `extractZip`.

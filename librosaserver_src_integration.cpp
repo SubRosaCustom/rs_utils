@@ -1,6 +1,13 @@
+#include <arpa/inet.h>
+#include <cerrno>
 #include <cstdint>
 #include <cstring>
+#include <netinet/in.h>
+#include <random>
 #include <stdexcept>
+#include <string>
+#include <string_view>
+#include <sys/socket.h>
 
 #include "sol/sol.hpp"
 #include "structs.h"
@@ -14,6 +21,7 @@ static constexpr unsigned int actualMaxNumberOfVehicleTypes = 127;
 
 ItemType *itemTypes = nullptr;
 VehicleType *vehicleTypes = nullptr;
+uintptr_t gameBaseAddress = 0;
 
 using LoadSBVFunction = void (*)(int, const char *);
 using LoadItemModelFunction = void (*)(int, char *);
@@ -25,6 +33,61 @@ LoadItemModelFunction loadITMFn = nullptr;
 LoadItemModelFunction loadIT3Fn = nullptr;
 SetupVehicleTypeNewFunction setupVehicleTypeNewFn = nullptr;
 SetupObjectTypeWeightFunction setupObjectTypeWeightFn = nullptr;
+
+std::string randomToken() {
+  static constexpr char HEX[] = "0123456789abcdef";
+  std::random_device random;
+  std::string token(16, '0');
+  for (std::size_t i = 0; i < token.size(); i += 2) {
+    const auto byte = static_cast<unsigned int>(random()) & 0xffU;
+    token[i] = HEX[byte >> 4U];
+    token[i + 1] = HEX[byte & 0x0fU];
+  }
+  return token;
+}
+
+int sendPacket(std::string_view address, int port, std::string_view bytes) {
+  if (gameBaseAddress == 0) {
+    throw std::runtime_error("game base address is unavailable");
+  }
+  if (port <= 0 || port > 65535) {
+    throw std::invalid_argument("UDP destination port out of range");
+  }
+  if (bytes.empty() || bytes.size() > 1200U) {
+    throw std::invalid_argument("UDP payload size out of range");
+  }
+
+  const int socket_index =
+      *reinterpret_cast<const int *>(gameBaseAddress + 0x39075c20);
+  if (socket_index < 0 || socket_index > 7) {
+    throw std::runtime_error("game UDP socket index is invalid");
+  }
+  const int socket_fd = *reinterpret_cast<const int *>(
+      gameBaseAddress + 0x39075c44 + (static_cast<uintptr_t>(socket_index) * 4U));
+  if (socket_fd < 0) {
+    throw std::runtime_error("game UDP socket is unavailable");
+  }
+
+  sockaddr_in destination{};
+  destination.sin_family = AF_INET;
+  destination.sin_port = htons(static_cast<std::uint16_t>(port));
+  if (::inet_pton(AF_INET, std::string(address).c_str(),
+                  &destination.sin_addr) != 1) {
+    throw std::invalid_argument("invalid IPv4 address");
+  }
+
+  const auto sent =
+      ::sendto(socket_fd, bytes.data(), bytes.size(), 0,
+               reinterpret_cast<const sockaddr *>(&destination),
+               sizeof(destination));
+  if (sent == -1) {
+    if (errno == EAGAIN || errno == EWOULDBLOCK) {
+      return 0;
+    }
+    throw std::runtime_error(std::strerror(errno));
+  }
+  return static_cast<int>(sent);
+}
 
 bool isValidItemType(const ItemType &item_type) {
   return item_type.mass > 0.0f;
@@ -200,16 +263,16 @@ void setupObjectTypeWeight(int vehicle_type_index) {
 sol::table openLibrary(sol::this_state state) {
   sol::state_view lua(state);
 
-  const uintptr_t base_address = lua["memory"]["getBaseAddress"]();
-  itemTypes = reinterpret_cast<ItemType *>(base_address + 0x5a60d7c0);
-  vehicleTypes = reinterpret_cast<VehicleType *>(base_address + 0x4d03560);
-  loadITMFn = reinterpret_cast<LoadItemModelFunction>(base_address + 0x41740);
-  loadIT3Fn = reinterpret_cast<LoadItemModelFunction>(base_address + 0x42c40);
-  loadSBVFn = reinterpret_cast<LoadSBVFunction>(base_address + 0xaf0e0);
+  gameBaseAddress = lua["memory"]["getBaseAddress"]();
+  itemTypes = reinterpret_cast<ItemType *>(gameBaseAddress + 0x5a60d7c0);
+  vehicleTypes = reinterpret_cast<VehicleType *>(gameBaseAddress + 0x4d03560);
+  loadITMFn = reinterpret_cast<LoadItemModelFunction>(gameBaseAddress + 0x41740);
+  loadIT3Fn = reinterpret_cast<LoadItemModelFunction>(gameBaseAddress + 0x42c40);
+  loadSBVFn = reinterpret_cast<LoadSBVFunction>(gameBaseAddress + 0xaf0e0);
   setupVehicleTypeNewFn = reinterpret_cast<SetupVehicleTypeNewFunction>(
-      base_address + 0xac890);
+      gameBaseAddress + 0xac890);
   setupObjectTypeWeightFn = reinterpret_cast<SetupObjectTypeWeightFunction>(
-      base_address + 0xabec0);
+      gameBaseAddress + 0xabec0);
 
   {
     sol::table lua_item_types = lua["itemTypes"];
@@ -253,6 +316,8 @@ sol::table openLibrary(sol::this_state state) {
   library["loadSBV"] = &loadSBV;
   library["setupVehicleTypeNew"] = &setupVehicleTypeNew;
   library["setupObjectTypeWeight"] = &setupObjectTypeWeight;
+  library["randomToken"] = &randomToken;
+  library["sendPacket"] = &sendPacket;
   lua["srcIntegrationNative"] = library;
   return library;
 }
