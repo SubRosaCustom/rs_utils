@@ -1,4 +1,5 @@
 #include <arpa/inet.h>
+#include <array>
 #include <cerrno>
 #include <cstdint>
 #include <cstring>
@@ -37,7 +38,7 @@ SetupObjectTypeWeightFunction setupObjectTypeWeightFn = nullptr;
 std::string randomToken() {
   static constexpr char HEX[] = "0123456789abcdef";
   std::random_device random;
-  std::string token(16, '0');
+  std::string token(32, '0');
   for (std::size_t i = 0; i < token.size(); i += 2) {
     const auto byte = static_cast<unsigned int>(random()) & 0xffU;
     token[i] = HEX[byte >> 4U];
@@ -46,15 +47,9 @@ std::string randomToken() {
   return token;
 }
 
-int sendPacket(std::string_view address, int port, std::string_view bytes) {
+int gameSocketFd() {
   if (gameBaseAddress == 0) {
     throw std::runtime_error("game base address is unavailable");
-  }
-  if (port <= 0 || port > 65535) {
-    throw std::invalid_argument("UDP destination port out of range");
-  }
-  if (bytes.empty() || bytes.size() > 1200U) {
-    throw std::invalid_argument("UDP payload size out of range");
   }
 
   const int socket_index =
@@ -67,6 +62,18 @@ int sendPacket(std::string_view address, int port, std::string_view bytes) {
   if (socket_fd < 0) {
     throw std::runtime_error("game UDP socket is unavailable");
   }
+  return socket_fd;
+}
+
+int sendPacket(std::string_view address, int port, std::string_view bytes) {
+  if (port <= 0 || port > 65535) {
+    throw std::invalid_argument("UDP destination port out of range");
+  }
+  if (bytes.empty() || bytes.size() > 1200U) {
+    throw std::invalid_argument("UDP payload size out of range");
+  }
+
+  const int socket_fd = gameSocketFd();
 
   sockaddr_in destination{};
   destination.sin_family = AF_INET;
@@ -87,6 +94,99 @@ int sendPacket(std::string_view address, int port, std::string_view bytes) {
     throw std::runtime_error(std::strerror(errno));
   }
   return static_cast<int>(sent);
+}
+
+sol::table drainSrcPackets(sol::this_state state) {
+  static constexpr std::string_view MAGIC = "7DFPSRCU";
+  static constexpr std::size_t MAX_DATAGRAM_SIZE = 1200;
+  static constexpr int MAX_DRAIN_COUNT = 32;
+
+  sol::state_view lua(state);
+  sol::table result = lua.create_table();
+  sol::table packets = lua.create_table();
+  result["packets"] = packets;
+  result["vanillaPending"] = false;
+
+  const int socket_fd = gameSocketFd();
+  std::array<char, MAX_DATAGRAM_SIZE> buffer{};
+  int drained = 0;
+
+  while (drained < MAX_DRAIN_COUNT) {
+    sockaddr_in source{};
+    socklen_t source_size = sizeof(source);
+    const auto peeked =
+        ::recvfrom(socket_fd, buffer.data(), buffer.size(),
+                   MSG_PEEK | MSG_DONTWAIT | MSG_TRUNC,
+                   reinterpret_cast<sockaddr *>(&source), &source_size);
+    if (peeked == -1) {
+      if (errno == EAGAIN || errno == EWOULDBLOCK) {
+        break;
+      }
+      throw std::runtime_error(std::strerror(errno));
+    }
+
+    const bool is_src =
+        peeked >= static_cast<ssize_t>(MAGIC.size()) &&
+        std::memcmp(buffer.data(), MAGIC.data(), MAGIC.size()) == 0;
+    if (!is_src) {
+      result["vanillaPending"] = true;
+      break;
+    }
+
+    source_size = sizeof(source);
+    const auto received =
+        ::recvfrom(socket_fd, buffer.data(), buffer.size(), MSG_DONTWAIT,
+                   reinterpret_cast<sockaddr *>(&source), &source_size);
+    if (received == -1) {
+      if (errno == EAGAIN || errno == EWOULDBLOCK) {
+        break;
+      }
+      throw std::runtime_error(std::strerror(errno));
+    }
+    ++drained;
+
+    if (peeked > static_cast<ssize_t>(buffer.size()) ||
+        received != peeked || source.sin_family != AF_INET) {
+      continue;
+    }
+
+    std::array<char, INET_ADDRSTRLEN> address{};
+    if (::inet_ntop(AF_INET, &source.sin_addr, address.data(),
+                    address.size()) == nullptr) {
+      continue;
+    }
+
+    sol::table packet = lua.create_table();
+    packet["address"] = std::string(address.data());
+    packet["port"] = static_cast<int>(ntohs(source.sin_port));
+    packet["data"] =
+        std::string(buffer.data(), static_cast<std::size_t>(received));
+    packets.add(packet);
+  }
+
+  result["drained"] = drained;
+  return result;
+}
+
+sol::table currentPacketEndpoint(sol::this_state state) {
+  if (gameBaseAddress == 0) {
+    throw std::runtime_error("game base address is unavailable");
+  }
+
+  const auto address =
+      *reinterpret_cast<const std::uint32_t *>(gameBaseAddress + 0x39085C84);
+  const auto port =
+      *reinterpret_cast<const std::int32_t *>(gameBaseAddress + 0x39085C88);
+
+  sol::state_view lua(state);
+  sol::table endpoint = lua.create_table();
+  endpoint["address"] =
+      std::to_string((address >> 24U) & 0xffU) + "." +
+      std::to_string((address >> 16U) & 0xffU) + "." +
+      std::to_string((address >> 8U) & 0xffU) + "." +
+      std::to_string(address & 0xffU);
+  endpoint["port"] = static_cast<int>(port);
+  return endpoint;
 }
 
 bool isValidItemType(const ItemType &item_type) {
@@ -318,6 +418,8 @@ sol::table openLibrary(sol::this_state state) {
   library["setupObjectTypeWeight"] = &setupObjectTypeWeight;
   library["randomToken"] = &randomToken;
   library["sendPacket"] = &sendPacket;
+  library["drainSrcPackets"] = &drainSrcPackets;
+  library["currentPacketEndpoint"] = &currentPacketEndpoint;
   lua["srcIntegrationNative"] = library;
   return library;
 }
