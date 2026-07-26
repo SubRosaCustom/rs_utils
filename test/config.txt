@@ -1,0 +1,4 @@
+servername=rs_utils tests
+serverport=27060
+maxnumofplayers=4
+gametype=4

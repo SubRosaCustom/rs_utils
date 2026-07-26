@@ -1,0 +1,25 @@
+#!/bin/bash
+
+set -euo pipefail
+
+probe_pid=
+
+cleanup() {
+	if [[ -n "$probe_pid" ]]; then
+		kill "$probe_pid" 2>/dev/null || true
+		wait "$probe_pid" 2>/dev/null || true
+	fi
+	rm -f libluajit.so libminiz.so librosaserver_src_integration.so
+	rm -f server.srk serverlog.txt udp_inbound.ready udp_outbound.bin udp_probe.ready
+}
+trap cleanup EXIT
+
+cp ../deps/moonjit/src/libluajit.so .
+cp ../build/libminiz.so .
+cp ../build/librosaserver_src_integration.so .
+
+rm -f udp_inbound.ready udp_outbound.bin udp_probe.ready
+python3 udp_probe.py &
+probe_pid=$!
+
+timeout 30s env LD_PRELOAD="$(pwd)/libluajit.so $(pwd)/libminiz.so $(pwd)/librosaserver_src_integration.so $(pwd)/librosaserver.so" ./subrosadedicated.x64

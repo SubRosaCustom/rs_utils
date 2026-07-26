@@ -1,15 +1,13 @@
-name: Release
+name: Test
 
 on:
-  push:
+  workflow_dispatch:
+  pull_request:
     branches:
       - main
 
-permissions:
-  contents: write
-
 jobs:
-  build-release:
+  test:
     runs-on: ubuntu-latest
 
     steps:
@@ -18,7 +16,7 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Install LuaJIT
+      - name: Install dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y cmake build-essential liblz4-dev libssl-dev libsqlite3-dev libopus-dev
@@ -35,19 +33,3 @@ jobs:
       - name: Test
         working-directory: test
         run: ./test
-
-      - name: Package
-        run: |
-          mkdir -p dist
-          cp build/librosaserver_src_integration.so dist/
-          cp build/libminiz.so dist/
-          cp deps/moonjit/src/libluajit.so dist/
-          cd dist
-          zip -r "../librosaserver_src_integration-${GITHUB_SHA}.zip" .
-
-      - name: Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: main-${{ github.sha }}
-          name: main-${{ github.sha }}
-          files: librosaserver_src_integration-${{ github.sha }}.zip

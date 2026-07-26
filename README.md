@@ -42,7 +42,7 @@ Clone recursively so the vendored dependencies are present:
 ```bash
 git clone --recursive https://github.com/SubRosaCustom/rs_utils.git
 cd rs_utils
-make -C deps/moonjit/src
+make -C deps/moonjit/src XCFLAGS+="-DLUAJIT_ENABLE_LUA52COMPAT -DLUAJIT_ENABLE_GC64"
 cmake -S . -B build
 cmake --build build --config Release
 ```
@@ -55,6 +55,11 @@ This repo vendors these dependencies as submodules:
 - `deps/moonjit`
 - `deps/sol2`
 - `deps/miniz`
+
+## Testing
+
+After building, run `cd test && ./test`. The suite loads the current build into
+a RosaServer runtime and exercises the Lua modules and game UDP socket.
 
 ## Installation
 - Download the latest release
