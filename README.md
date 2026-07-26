@@ -1,3 +1,5 @@
+[![Release](https://github.com/SubRosaCustom/rs_utils/actions/workflows/release.yml/badge.svg)](https://github.com/SubRosaCustom/rs_utils/actions/workflows/release.yml)
+
 # rs_utils
 Native helper repo for SRC server-side RosaServer integration. It builds the two Lua-loadable shared libraries used by `rs_integration`:
 - `librosaserver_src_integration.so` for custom `itemTypes` overrides
