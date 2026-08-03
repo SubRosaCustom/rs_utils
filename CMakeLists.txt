@@ -8,13 +8,16 @@ set(ROSASERVER_ROOT "${DEPS_ROOT}/rosaserver_headers")
 
 # librosaserver_src_integration.so
 add_library(rosaserver_src_integration SHARED
+    item_types.cpp
     librosaserver_src_integration.cpp
+    udp.cpp
+    vehicle_types.cpp
 )
 
 set_property(TARGET rosaserver_src_integration PROPERTY CXX_STANDARD 17)
-set_property(TARGET rosaserver_src_integration PROPERTY C_VISIBILITY_PRESET default)
-set_property(TARGET rosaserver_src_integration PROPERTY CXX_VISIBILITY_PRESET default)
-set_property(TARGET rosaserver_src_integration PROPERTY VISIBILITY_INLINES_HIDDEN OFF)
+set_property(TARGET rosaserver_src_integration PROPERTY C_VISIBILITY_PRESET hidden)
+set_property(TARGET rosaserver_src_integration PROPERTY CXX_VISIBILITY_PRESET hidden)
+set_property(TARGET rosaserver_src_integration PROPERTY VISIBILITY_INLINES_HIDDEN ON)
 
 target_compile_definitions(rosaserver_src_integration PRIVATE SOL_LUAJIT)
 target_include_directories(rosaserver_src_integration PRIVATE

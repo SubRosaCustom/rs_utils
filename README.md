@@ -3,21 +3,26 @@
 
 # rs_utils
 Native helper repo for SRC server-side RosaServer integration. It builds the two Lua-loadable shared libraries used by `rs_integration`:
-- `librosaserver_src_integration.so` for custom `itemTypes` overrides
+- `librosaserver_src_integration.so` for custom item and vehicle types, model loaders, and game UDP access
 - `libminiz.so` for in-memory ZIP archive helpers
-
-## Future
-In the future we will add extending of `VehicleTypes` as well and maybe some stuff that will be more optimized in C++.
 
 ## Disclaimer
 This is an integral server part of RosaServer integration for SR:C, you won't be able to make SR:C function on your server without this.
 
 ## Behavior
-- `require("librosaserver_src_integration")` installs the Lua-side `itemTypes` overrides.
-- The integration module also exposes `sendPacket`, which sends standalone
-  datagrams through the game's existing UDP socket.
+- `require("librosaserver_src_integration")` installs the Lua-side `itemTypes` and `vehicleTypes` overrides.
+- The native game layout is enabled only for Sub Rosa version `38e`, reported by RosaServer as `server.versionMajor == 38` and `server.versionMinor == 4`.
+- `sendPacket` sends standalone datagrams through the game's existing UDP socket.
+- `drainSrcPackets` drains bounded SRC datagrams without consuming pending vanilla game packets.
+- `currentPacketEndpoint` reports the source endpoint of the current game packet.
+- `randomToken` generates the server's UDP authentication tokens.
 - The module extends `itemTypes` access past the stock RosaServer max of 46 up to an actual max of 255.
+- The module extends `vehicleTypes` access past the stock RosaServer max of 17 up to an actual max of 127.
 - Extended item types are treated as valid when `mass > 0`.
+- Extended vehicle types are treated as valid when `mass > 0`.
+- `loadITM`, `loadIT3`, and `loadSBV` load custom item and vehicle models.
+- `clearCustomVehicleTypeSlots` clears vehicle type slots 17 through 127.
+- `setupVehicleTypeNew` and `setupObjectTypeWeight` initialize custom vehicle type data.
 - `require("libminiz")` registers the global `miniz` table with `createZip` / `extractZip`.
 
 ## Lua Usage

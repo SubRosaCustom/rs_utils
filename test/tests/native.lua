@@ -6,6 +6,7 @@ return function()
 		"loadITM",
 		"loadIT3",
 		"loadSBV",
+		"clearCustomVehicleTypeSlots",
 		"setupVehicleTypeNew",
 		"setupObjectTypeWeight",
 		"randomToken",
